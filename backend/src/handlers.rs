@@ -40,6 +40,11 @@ pub struct SearchQuery {
     page: u32,
 }
 
+#[derive(Deserialize)]
+pub struct DownloadQuery {
+    md5: String,
+}
+
 pub async fn search_handler(
     Query(search_query): Query<SearchQuery>,
     State(state): State<AppState>,
@@ -63,4 +68,32 @@ pub async fn search_handler(
         total_pages: response.total_pages,
         books: response.books,
     }))
+}
+
+pub async fn download_handler(
+    Query(download_query): Query<DownloadQuery>,
+    State(state): State<AppState>,
+) -> Result<Json<String>, AppError> {
+    let request_url = format!(
+        "https://annas-archive-api.p.rapidapi.com/download?md5={}",
+        download_query.md5
+    );
+
+    let response = state
+        .client
+        .get(request_url)
+        .header("x-rapidapi-host", "annas-archive-api.p.rapidapi.com")
+        .header("x-rapidapi-key", state.rapidapi_key)
+        .send()
+        .await?
+        .json::<Vec<String>>()
+        .await?;
+
+    if let Some(url) = response.first() {
+        Ok(Json(url.clone()))
+    } else {
+        Err(AppError(anyhow::anyhow!(
+            "No download URL found for the given MD5 hash"
+        )))
+    }
 }

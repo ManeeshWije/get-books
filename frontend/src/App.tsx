@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Book, SearchResponse } from "./types";
 
 const API_URL = import.meta.env.MODE === "production" ? "" : "http://localhost:8080";
@@ -111,14 +111,69 @@ async function fetchBooksByTitle(query: string, page: number): Promise<SearchRes
     return searchResponse;
 }
 
+async function fetchDownloadUrl(md5: string): Promise<string> {
+    const searchParams = new URLSearchParams({ md5 });
+
+    const response = await fetch(`${API_URL}/download?${searchParams.toString()}`, {
+        headers: {
+            Accept: "text/plain, application/json"
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Download failed (${response.status})`);
+    }
+
+    const rawValue = await response.text();
+    const cleanedValue = rawValue.trim();
+
+    if (cleanedValue.length === 0) {
+        throw new Error("Download URL is empty");
+    }
+
+    if (cleanedValue.startsWith('"') && cleanedValue.endsWith('"')) {
+        try {
+            const parsedValue: unknown = JSON.parse(cleanedValue);
+            if (typeof parsedValue === "string") {
+                return parsedValue;
+            }
+        } catch {
+            return cleanedValue.slice(1, -1);
+        }
+    }
+
+    return cleanedValue;
+}
+
+function startDownloadFromUrl(downloadUrl: string): void {
+    let validatedUrl: URL;
+
+    try {
+        validatedUrl = new URL(downloadUrl);
+    } catch {
+        throw new Error("Download URL is invalid");
+    }
+
+    window.location.assign(validatedUrl.toString());
+}
+
 type BookCardProps = {
     book: Book;
+    isDownloadLoading: boolean;
     transferEntry: TransferCodeEntry | undefined;
     remainingMs: number;
+    onRequestDownload: (md5: string) => void;
     onRequestTransfer: (md5: string) => void;
 };
 
-function BookCard({ book, transferEntry, remainingMs, onRequestTransfer }: BookCardProps) {
+function BookCard({
+    book,
+    isDownloadLoading,
+    transferEntry,
+    remainingMs,
+    onRequestDownload,
+    onRequestTransfer
+}: BookCardProps) {
     const [imageFailed, setImageFailed] = useState(false);
     const isTransferActive = transferEntry !== undefined && remainingMs > 0;
 
@@ -167,9 +222,11 @@ function BookCard({ book, transferEntry, remainingMs, onRequestTransfer }: BookC
                 <div className="mt-3 flex flex-wrap gap-2">
                     <button
                         type="button"
+                        onClick={() => onRequestDownload(book.md5)}
+                        disabled={isDownloadLoading}
                         className="rounded-md border border-indigo-400/40 bg-indigo-400/15 px-3 py-1.5 text-xs font-medium text-indigo-100 transition hover:border-indigo-300/70 hover:bg-indigo-400/25"
                     >
-                        Download
+                        {isDownloadLoading ? "Preparing..." : "Download"}
                     </button>
 
                     {isTransferActive && transferEntry !== undefined ? (
@@ -197,6 +254,7 @@ function App() {
     const [submittedQuery, setSubmittedQuery] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
     const [transferCodeInput, setTransferCodeInput] = useState("");
+    const [activeDownloadMd5, setActiveDownloadMd5] = useState<string | null>(null);
     const [activeTransferCodes, setActiveTransferCodes] = useState<TransferCodeMap>(() => readTransferCodeMap());
     const [now, setNow] = useState(() => Date.now());
 
@@ -254,6 +312,13 @@ function App() {
     const totalPages = searchResponse?.totalPages ?? 0;
     const paginationItems = buildPaginationItems(currentPage, totalPages);
 
+    const downloadMutation = useMutation<string, Error, string>({
+        mutationFn: fetchDownloadUrl,
+        onSuccess: downloadUrl => {
+            startDownloadFromUrl(downloadUrl);
+        }
+    });
+
     const handleStartTransfer = (md5: string): void => {
         setActiveTransferCodes(previousValue => ({
             ...previousValue,
@@ -262,6 +327,15 @@ function App() {
                 createdAt: Date.now()
             }
         }));
+    };
+
+    const handleDownloadBook = (md5: string): void => {
+        setActiveDownloadMd5(md5);
+        downloadMutation.mutate(md5, {
+            onSettled: () => {
+                setActiveDownloadMd5(null);
+            }
+        });
     };
 
     const handleSubmitSearch = (event: React.SubmitEvent<HTMLFormElement>): void => {
@@ -304,6 +378,10 @@ function App() {
 
                             {error instanceof Error && <p className="text-center text-rose-300">{error.message}</p>}
 
+                            {downloadMutation.error instanceof Error && (
+                                <p className="mt-1 text-center text-rose-300">{downloadMutation.error.message}</p>
+                            )}
+
                             {!isFetching && !error && searchResponse !== undefined && books.length === 0 && (
                                 <p className="text-center text-slate-400">No books found.</p>
                             )}
@@ -320,8 +398,12 @@ function App() {
                                                 <BookCard
                                                     key={book.md5}
                                                     book={book}
+                                                    isDownloadLoading={
+                                                        activeDownloadMd5 === book.md5 && downloadMutation.isPending
+                                                    }
                                                     transferEntry={transferEntry}
                                                     remainingMs={remainingMs}
+                                                    onRequestDownload={handleDownloadBook}
                                                     onRequestTransfer={handleStartTransfer}
                                                 />
                                             );

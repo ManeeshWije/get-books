@@ -64,7 +64,7 @@ async fn main() {
     let app = Router::new()
         .nest_service("/", ServeDir::new(dist_dir))
         .route("/search", get(handlers::search_handler))
-        // .route("/download/:md5", get(handlers::download_handler))
+        .route("/download", get(handlers::download_handler))
         // .route("/transfer/:code", get(transfer_handler))
         .with_state(state)
         .layer(cors_middleware)
