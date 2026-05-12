@@ -70,6 +70,7 @@ async fn main() {
         .route("/download", get(handlers::download_handler))
         .route("/start-transfer", get(handlers::start_transfer_handler))
         .route("/end-transfer", get(handlers::end_transfer_handler))
+        .route("/kobo", get(handlers::kobo_page_handler))
         .with_state(state)
         .layer(cors_middleware)
         .layer(

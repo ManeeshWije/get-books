@@ -1,6 +1,7 @@
 use axum::{
     Json,
     extract::{Query, State},
+    response::Html,
 };
 use redis::TypedCommands;
 use serde::{Deserialize, Serialize};
@@ -300,4 +301,62 @@ pub async fn end_transfer_handler(
         .header("Content-Type", "application/octet-stream")
         .body(body)
         .unwrap())
+}
+
+pub async fn kobo_page_handler() -> Html<&'static str> {
+    Html(r#"
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kobo Transfer</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #0b0f14;
+            color: #e5e7eb;
+            padding: 20px;
+        }
+
+        input, button {
+            width: 100%;
+            font-size: 18px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        input {
+            background: #111827;
+            color: white;
+            border: 1px solid #374151;
+        }
+
+        button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+        }
+
+        button:active {
+            transform: scale(0.99);
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Enter transfer code</h2>
+
+    <form action="http://localhost:8080/end-transfer" method="GET">
+        <input
+            name="short_code"
+            placeholder="ABC123"
+            autocomplete="off"
+            required
+        />
+        <button type="submit">Download</button>
+    </form>
+</body>
+</html>
+"#)
 }
