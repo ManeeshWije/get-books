@@ -1,3 +1,4 @@
+mod cleanup;
 mod error;
 mod handlers;
 use axum::{Router, routing::get};
@@ -60,6 +61,8 @@ async fn main() {
         client,
         rapidapi_key,
     };
+
+    cleanup::spawn_temp_file_cleanup_task();
 
     let app = Router::new()
         .nest_service("/", ServeDir::new(dist_dir))
