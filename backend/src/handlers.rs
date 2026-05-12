@@ -347,7 +347,7 @@ pub async fn kobo_page_handler() -> Html<&'static str> {
 <body>
     <h2>Enter transfer code</h2>
 
-    <form action="http://localhost:8080/end-transfer" method="GET">
+    <form action="/end-transfer" method="GET">
         <input
             name="short_code"
             placeholder="ABC123"
