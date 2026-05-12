@@ -304,7 +304,8 @@ pub async fn end_transfer_handler(
 }
 
 pub async fn kobo_page_handler() -> Html<&'static str> {
-    Html(r#"
+    Html(
+        r#"
 <!doctype html>
 <html>
 <head>
@@ -358,5 +359,6 @@ pub async fn kobo_page_handler() -> Html<&'static str> {
     </form>
 </body>
 </html>
-"#)
+"#,
+    )
 }

@@ -11,7 +11,7 @@ import {
     type TransferCodeEntry,
     type TransferCodeMap
 } from "./utils";
-import { endTransfer, fetchBooksByTitle, fetchDownloadUrl, startTransfer } from "./handlers";
+import { fetchBooksByTitle, fetchDownloadUrl, startTransfer } from "./handlers";
 
 type BookCardProps = {
     book: Book;
@@ -34,6 +34,7 @@ function BookCard({
 }: BookCardProps) {
     const [imageFailed, setImageFailed] = useState(false);
     const isTransferActive = transferEntry !== undefined && remainingMs > 0;
+    const koboUrl = `${window.location.origin}/kobo`;
 
     return (
         <li className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 p-3">
@@ -103,6 +104,13 @@ function BookCard({
                         </button>
                     )}
                 </div>
+
+                {isTransferActive && (
+                    <p className="mt-2 text-[11px] text-slate-400">
+                        On your Kobo device, open Beta Features → Browse Internet, then visit {koboUrl} and enter this
+                        code within 10 minutes.
+                    </p>
+                )}
             </div>
         </li>
     );
@@ -112,7 +120,6 @@ function App() {
     const [searchInput, setSearchInput] = useState("");
     const [submittedQuery, setSubmittedQuery] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
-    const [transferCodeInput, setTransferCodeInput] = useState("");
     const [activeDownloadMd5, setActiveDownloadMd5] = useState<string | null>(null);
     const [activeTransferMd5, setActiveTransferMd5] = useState<string | null>(null);
     const [activeTransferCodes, setActiveTransferCodes] = useState<TransferCodeMap>(() => readTransferCodeMap());
@@ -179,13 +186,6 @@ function App() {
         mutationFn: startTransfer
     });
 
-    const endTransferMutation = useMutation<void, Error, string>({
-        mutationFn: endTransfer,
-        onSuccess: () => {
-            setTransferCodeInput("");
-        }
-    });
-
     const books = searchResponse?.books ?? [];
     const totalPages = searchResponse?.totalPages ?? 0;
     const paginationItems = buildPaginationItems(currentPage, totalPages);
@@ -222,16 +222,6 @@ function App() {
         const nextQuery = searchInput.trim();
         setCurrentPage(1);
         setSubmittedQuery(nextQuery);
-    };
-
-    const handleSubmitTransferCode = (event: React.SubmitEvent<HTMLFormElement>): void => {
-        event.preventDefault();
-        const shortCode = transferCodeInput.trim();
-        if (shortCode.length === 0) {
-            return;
-        }
-
-        endTransferMutation.mutate(shortCode);
     };
 
     return (
@@ -273,10 +263,6 @@ function App() {
 
                             {startTransferMutation.error instanceof Error && (
                                 <p className="mt-1 text-center text-rose-300">{startTransferMutation.error.message}</p>
-                            )}
-
-                            {endTransferMutation.error instanceof Error && (
-                                <p className="mt-1 text-center text-rose-300">{endTransferMutation.error.message}</p>
                             )}
 
                             {!isFetching && !error && searchResponse !== undefined && books.length === 0 && (
@@ -375,33 +361,6 @@ function App() {
                         </div>
                     </div>
                 </section>
-
-                <aside className="fixed right-4 top-4 z-20 w-[min(22rem,calc(100vw-2rem))]">
-                    <div className="w-full rounded-xl border border-slate-700/70 bg-slate-950/85 p-3 backdrop-blur">
-                        <p className="text-sm text-slate-300">Enter transfer code</p>
-                        <form className="mt-2 flex items-center gap-2" onSubmit={handleSubmitTransferCode}>
-                            <label htmlFor="kobo-transfer-code" className="sr-only">
-                                Transfer code
-                            </label>
-                            <input
-                                id="kobo-transfer-code"
-                                type="text"
-                                autoComplete="off"
-                                placeholder="Short code"
-                                value={transferCodeInput}
-                                onChange={event => setTransferCodeInput(event.target.value)}
-                                className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950/90 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-3 focus:ring-indigo-400/20"
-                            />
-                            <button
-                                type="submit"
-                                disabled={endTransferMutation.isPending}
-                                className="rounded-md border border-slate-500/50 bg-slate-800/90 px-3 py-2 text-sm text-slate-100 transition hover:border-slate-400 hover:bg-slate-700/90 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {endTransferMutation.isPending ? "Submitting..." : "Submit"}
-                            </button>
-                        </form>
-                    </div>
-                </aside>
 
                 <footer className="pt-2 text-center text-sm text-slate-400">
                     made with ❤️ by{" "}

@@ -1,5 +1,4 @@
 import type { SearchResponse, StartTransferResponse } from "./types";
-import { downloadBlob, getDownloadFileName } from "./utils";
 
 const API_URL = import.meta.env.MODE === "production" ? "" : "http://localhost:8080";
 
@@ -67,26 +66,4 @@ export async function startTransfer(md5: string): Promise<StartTransferResponse>
 
     const payload: StartTransferResponse = await response.json();
     return payload;
-}
-
-export async function endTransfer(shortCode: string): Promise<void> {
-    const searchParams = new URLSearchParams({ short_code: shortCode });
-
-    const response = await fetch(`${API_URL}/end-transfer?${searchParams.toString()}`, {
-        headers: {
-            Accept: "application/octet-stream, application/json"
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error(`Transfer submit failed (${response.status})`);
-    }
-
-    const blob = await response.blob();
-    if (blob.size === 0) {
-        throw new Error("Transfer download is empty");
-    }
-
-    const fileName = getDownloadFileName(response.headers.get("content-disposition"));
-    downloadBlob(blob, fileName);
 }
