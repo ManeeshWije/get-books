@@ -166,31 +166,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "backend"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "chrono",
- "dotenv",
- "futures-util",
- "http",
- "r2d2",
- "redis",
- "reqwest",
- "serde",
- "serde_json",
- "tiny_id",
- "tokio",
- "tokio-util",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
- "typeshare",
- "uuid",
-]
-
-[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -492,6 +467,31 @@ dependencies = [
  "futures-task",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "get-books"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "chrono",
+ "dotenv",
+ "futures-util",
+ "http",
+ "r2d2",
+ "redis",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tiny_id",
+ "tokio",
+ "tokio-util",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "typeshare",
+ "uuid",
 ]
 
 [[package]]
