@@ -1,11 +1,15 @@
 use std::time::{Duration, SystemTime};
 
 const TEMP_DIR: &str = "/tmp";
-const FILE_MAX_AGE: Duration = Duration::from_secs(60 * 60);
+const FILE_MAX_AGE: Duration = Duration::from_secs(30 * 60);
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 pub fn spawn_temp_file_cleanup_task() {
     tokio::spawn(async move {
+        if let Err(error) = cleanup_expired_temp_files().await {
+            tracing::warn!("temp file cleanup failed on startup: {error}");
+        }
+
         let mut ticker = tokio::time::interval(CLEANUP_INTERVAL);
 
         loop {
@@ -60,6 +64,10 @@ async fn cleanup_expired_temp_files() -> std::io::Result<()> {
 }
 
 fn is_app_temp_file(file_name: &str) -> bool {
+    if uuid::Uuid::parse_str(file_name).is_ok() {
+        return true;
+    }
+
     if let Some(uuid_candidate) = file_name.strip_suffix(".kepub.epub") {
         return uuid::Uuid::parse_str(uuid_candidate).is_ok();
     }
@@ -77,6 +85,7 @@ mod tests {
 
     #[test]
     fn matches_supported_temp_file_names() {
+        assert!(is_app_temp_file("2a8d8ed8-fb30-4f62-b68f-b558f7f2f4e3"));
         assert!(is_app_temp_file(
             "2a8d8ed8-fb30-4f62-b68f-b558f7f2f4e3.epub"
         ));

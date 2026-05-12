@@ -174,6 +174,9 @@ pub async fn start_transfer_handler(
 
         let output_kepub_path = format!("/tmp/{}.kepub.epub", transfer_id);
 
+        println!("Downloading file to: {}", input_epub_path);
+        println!("Converted file will be at: {}", output_kepub_path);
+
         // write downloaded epub to disk
         let mut file = tokio::fs::File::create(&input_epub_path).await?;
 
@@ -184,12 +187,22 @@ pub async fn start_transfer_handler(
         file.flush().await?;
 
         // run kepubify
-        let output = tokio::process::Command::new("./kepubify")
+        let output = tokio::process::Command::new("kepubify")
             .arg("-o")
-            .arg(&output_kepub_path)
+            .arg("/tmp")
             .arg(&input_epub_path)
             .output()
             .await?;
+
+        println!(
+            "kepubify stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        println!(
+            "kepubify stdout: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
 
         if !output.status.success() {
             return Err(AppError(anyhow::anyhow!(
@@ -197,6 +210,11 @@ pub async fn start_transfer_handler(
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
+
+        println!(
+            "kepubify output: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
 
         // remove original epub
         let _ = tokio::fs::remove_file(&input_epub_path).await;
