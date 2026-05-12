@@ -3,19 +3,23 @@
 */
 
 export interface Book {
-	title: string;
-	author: string;
-	md5: string;
-	imgUrl: string;
-	size: string;
-	genre: string;
-	format: string;
-	year?: string;
-	imgFallbackColor: string;
+    title: string;
+    author: string;
+    md5: string;
+    imgUrl: string;
+    size: string;
+    genre: string;
+    format: string;
+    year?: string;
+    imgFallbackColor: string;
 }
 
 export interface SearchResponse {
-	totalPages: number;
-	books: Book[];
+    totalPages: number;
+    books: Book[];
 }
 
+export interface StartTransferResponse {
+    short_code: string;
+    created_at: string;
+}

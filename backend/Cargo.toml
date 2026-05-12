@@ -19,3 +19,7 @@ r2d2 = "0.8.10"
 reqwest = { version = "0.13", features = ["json"] }
 typeshare = "1.0.0"
 anyhow = "1.0.102"
+tiny_id = "0.1.6"
+chrono = "0.4.44"
+serde_json = "1.0.149"
+tokio-util = "0.7.18"

@@ -1,10 +1,10 @@
-mod handlers;
 mod error;
+mod handlers;
 use axum::{Router, routing::get};
 use dotenv::dotenv;
 use http::{
     HeaderValue, Method,
-    header::{CONNECTION, CONTENT_TYPE, UPGRADE},
+    header::{CONNECTION, CONTENT_DISPOSITION, CONTENT_TYPE, UPGRADE},
 };
 use std::{env, net::SocketAddr};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
@@ -44,7 +44,8 @@ async fn main() {
     let cors_middleware = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT])
         .allow_origin(cors_origin)
-        .allow_headers(vec![CONTENT_TYPE, UPGRADE, CONNECTION])
+        .allow_headers(vec![CONTENT_TYPE, UPGRADE, CONNECTION, CONTENT_DISPOSITION])
+        .expose_headers(vec![CONTENT_DISPOSITION])
         .allow_credentials(true);
 
     let redis_url = env::var("REDIS_URL").expect("REDIS_URL must be set");
@@ -60,12 +61,12 @@ async fn main() {
         rapidapi_key,
     };
 
-
     let app = Router::new()
         .nest_service("/", ServeDir::new(dist_dir))
         .route("/search", get(handlers::search_handler))
         .route("/download", get(handlers::download_handler))
-        // .route("/transfer/:code", get(transfer_handler))
+        .route("/start-transfer", get(handlers::start_transfer_handler))
+        .route("/end-transfer", get(handlers::end_transfer_handler))
         .with_state(state)
         .layer(cors_middleware)
         .layer(

@@ -1,165 +1,22 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { Book, SearchResponse } from "./types";
-
-const API_URL = import.meta.env.MODE === "production" ? "" : "http://localhost:8080";
-const transferCodeTtlMs = 10 * 60 * 1000;
-const transferStorageKey = "active-transfer-codes";
-
-type TransferCodeEntry = {
-    code: string;
-    createdAt: number;
-};
-
-type TransferCodeMap = Record<string, TransferCodeEntry>;
-
-function readTransferCodeMap(): TransferCodeMap {
-    const rawValue = window.localStorage.getItem(transferStorageKey);
-    if (rawValue === null) {
-        return {};
-    }
-
-    try {
-        const parsed = JSON.parse(rawValue);
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-            return {};
-        }
-
-        const result: TransferCodeMap = {};
-
-        for (const [md5, entry] of Object.entries(parsed)) {
-            if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-                continue;
-            }
-
-            const code = Reflect.get(entry, "code");
-            const createdAt = Reflect.get(entry, "createdAt");
-
-            if (typeof code === "string" && typeof createdAt === "number" && Number.isFinite(createdAt)) {
-                result[md5] = { code, createdAt };
-            }
-        }
-
-        return result;
-    } catch {
-        return {};
-    }
-}
-
-function writeTransferCodeMap(value: TransferCodeMap): void {
-    window.localStorage.setItem(transferStorageKey, JSON.stringify(value));
-}
-
-function createTransferCode(): string {
-    const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-    const randomValues = new Uint32Array(6);
-    window.crypto.getRandomValues(randomValues);
-
-    let result = "";
-    for (const value of randomValues) {
-        result += alphabet[value % alphabet.length];
-    }
-
-    return result;
-}
-
-function getRemainingMs(entry: TransferCodeEntry, now: number): number {
-    return Math.max(0, entry.createdAt + transferCodeTtlMs - now);
-}
-
-function formatRemainingTime(remainingMs: number): string {
-    const totalSeconds = Math.ceil(remainingMs / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    const paddedSeconds = seconds < 10 ? `0${seconds}` : `${seconds}`;
-
-    return `${minutes}:${paddedSeconds}`;
-}
-
-type PaginationItem = number | "ellipsis";
-
-function buildPaginationItems(currentPage: number, totalPages: number): PaginationItem[] {
-    if (totalPages <= 7) {
-        return Array.from({ length: totalPages }, (_, index) => index + 1);
-    }
-
-    if (currentPage <= 4) {
-        return [1, 2, 3, 4, 5, "ellipsis", totalPages];
-    }
-
-    if (currentPage >= totalPages - 3) {
-        return [1, "ellipsis", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-    }
-
-    return [1, "ellipsis", currentPage - 1, currentPage, currentPage + 1, "ellipsis", totalPages];
-}
-
-async function fetchBooksByTitle(query: string, page: number): Promise<SearchResponse> {
-    const searchParams = new URLSearchParams({ q: query, page: `${page}` });
-
-    const response = await fetch(`${API_URL}/search?${searchParams.toString()}`, {
-        headers: {
-            Accept: "application/json"
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error(`Search failed (${response.status})`);
-    }
-
-    const searchResponse: SearchResponse = await response.json();
-    return searchResponse;
-}
-
-async function fetchDownloadUrl(md5: string): Promise<string> {
-    const searchParams = new URLSearchParams({ md5 });
-
-    const response = await fetch(`${API_URL}/download?${searchParams.toString()}`, {
-        headers: {
-            Accept: "text/plain, application/json"
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error(`Download failed (${response.status})`);
-    }
-
-    const rawValue = await response.text();
-    const cleanedValue = rawValue.trim();
-
-    if (cleanedValue.length === 0) {
-        throw new Error("Download URL is empty");
-    }
-
-    if (cleanedValue.startsWith('"') && cleanedValue.endsWith('"')) {
-        try {
-            const parsedValue: unknown = JSON.parse(cleanedValue);
-            if (typeof parsedValue === "string") {
-                return parsedValue;
-            }
-        } catch {
-            return cleanedValue.slice(1, -1);
-        }
-    }
-
-    return cleanedValue;
-}
-
-function startDownloadFromUrl(downloadUrl: string): void {
-    let validatedUrl: URL;
-
-    try {
-        validatedUrl = new URL(downloadUrl);
-    } catch {
-        throw new Error("Download URL is invalid");
-    }
-
-    window.location.assign(validatedUrl.toString());
-}
+import type { Book, SearchResponse, StartTransferResponse } from "./types";
+import {
+    buildPaginationItems,
+    formatRemainingTime,
+    getRemainingMs,
+    readTransferCodeMap,
+    startDownloadFromUrl,
+    writeTransferCodeMap,
+    type TransferCodeEntry,
+    type TransferCodeMap
+} from "./utils";
+import { endTransfer, fetchBooksByTitle, fetchDownloadUrl, startTransfer } from "./handlers";
 
 type BookCardProps = {
     book: Book;
     isDownloadLoading: boolean;
+    isTransferLoading: boolean;
     transferEntry: TransferCodeEntry | undefined;
     remainingMs: number;
     onRequestDownload: (md5: string) => void;
@@ -169,6 +26,7 @@ type BookCardProps = {
 function BookCard({
     book,
     isDownloadLoading,
+    isTransferLoading,
     transferEntry,
     remainingMs,
     onRequestDownload,
@@ -224,23 +82,24 @@ function BookCard({
                         type="button"
                         onClick={() => onRequestDownload(book.md5)}
                         disabled={isDownloadLoading}
-                        className="rounded-md border border-indigo-400/40 bg-indigo-400/15 px-3 py-1.5 text-xs font-medium text-indigo-100 transition hover:border-indigo-300/70 hover:bg-indigo-400/25"
+                        className="rounded-md border border-indigo-400/40 bg-indigo-400/15 px-3 py-1.5 text-xs font-medium text-indigo-100 transition hover:border-indigo-300/70 hover:bg-indigo-400/25 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         {isDownloadLoading ? "Preparing..." : "Download"}
                     </button>
 
                     {isTransferActive && transferEntry !== undefined ? (
                         <div className="inline-flex items-center gap-2 rounded-md border border-teal-400/40 bg-teal-400/15 px-3 py-1.5 text-xs font-medium text-teal-100">
-                            <span className="font-mono tracking-widest">{transferEntry.code}</span>
+                            <span className="font-mono tracking-widest">{transferEntry.shortCode}</span>
                             <span className="text-teal-200/90">{formatRemainingTime(remainingMs)}</span>
                         </div>
                     ) : (
                         <button
                             type="button"
                             onClick={() => onRequestTransfer(book.md5)}
-                            className="rounded-md border border-teal-400/40 bg-teal-400/15 px-3 py-1.5 text-xs font-medium text-teal-100 transition hover:border-teal-300/70 hover:bg-teal-400/25"
+                            disabled={isTransferLoading}
+                            className="rounded-md border border-teal-400/40 bg-teal-400/15 px-3 py-1.5 text-xs font-medium text-teal-100 transition hover:border-teal-300/70 hover:bg-teal-400/25 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            Transfer to Kobo
+                            {isTransferLoading ? "Preparing..." : "Transfer to Kobo"}
                         </button>
                     )}
                 </div>
@@ -255,6 +114,7 @@ function App() {
     const [currentPage, setCurrentPage] = useState(1);
     const [transferCodeInput, setTransferCodeInput] = useState("");
     const [activeDownloadMd5, setActiveDownloadMd5] = useState<string | null>(null);
+    const [activeTransferMd5, setActiveTransferMd5] = useState<string | null>(null);
     const [activeTransferCodes, setActiveTransferCodes] = useState<TransferCodeMap>(() => readTransferCodeMap());
     const [now, setNow] = useState(() => Date.now());
 
@@ -308,10 +168,6 @@ function App() {
         staleTime: Number.POSITIVE_INFINITY
     });
 
-    const books = searchResponse?.books ?? [];
-    const totalPages = searchResponse?.totalPages ?? 0;
-    const paginationItems = buildPaginationItems(currentPage, totalPages);
-
     const downloadMutation = useMutation<string, Error, string>({
         mutationFn: fetchDownloadUrl,
         onSuccess: downloadUrl => {
@@ -319,15 +175,20 @@ function App() {
         }
     });
 
-    const handleStartTransfer = (md5: string): void => {
-        setActiveTransferCodes(previousValue => ({
-            ...previousValue,
-            [md5]: {
-                code: createTransferCode(),
-                createdAt: Date.now()
-            }
-        }));
-    };
+    const startTransferMutation = useMutation<StartTransferResponse, Error, string>({
+        mutationFn: startTransfer
+    });
+
+    const endTransferMutation = useMutation<void, Error, string>({
+        mutationFn: endTransfer,
+        onSuccess: () => {
+            setTransferCodeInput("");
+        }
+    });
+
+    const books = searchResponse?.books ?? [];
+    const totalPages = searchResponse?.totalPages ?? 0;
+    const paginationItems = buildPaginationItems(currentPage, totalPages);
 
     const handleDownloadBook = (md5: string): void => {
         setActiveDownloadMd5(md5);
@@ -338,11 +199,39 @@ function App() {
         });
     };
 
+    const handleStartTransfer = (md5: string): void => {
+        setActiveTransferMd5(md5);
+        startTransferMutation.mutate(md5, {
+            onSuccess: response => {
+                setActiveTransferCodes(previousValue => ({
+                    ...previousValue,
+                    [md5]: {
+                        shortCode: response.short_code,
+                        createdAt: response.created_at
+                    }
+                }));
+            },
+            onSettled: () => {
+                setActiveTransferMd5(null);
+            }
+        });
+    };
+
     const handleSubmitSearch = (event: React.SubmitEvent<HTMLFormElement>): void => {
         event.preventDefault();
         const nextQuery = searchInput.trim();
         setCurrentPage(1);
         setSubmittedQuery(nextQuery);
+    };
+
+    const handleSubmitTransferCode = (event: React.SubmitEvent<HTMLFormElement>): void => {
+        event.preventDefault();
+        const shortCode = transferCodeInput.trim();
+        if (shortCode.length === 0) {
+            return;
+        }
+
+        endTransferMutation.mutate(shortCode);
     };
 
     return (
@@ -382,6 +271,14 @@ function App() {
                                 <p className="mt-1 text-center text-rose-300">{downloadMutation.error.message}</p>
                             )}
 
+                            {startTransferMutation.error instanceof Error && (
+                                <p className="mt-1 text-center text-rose-300">{startTransferMutation.error.message}</p>
+                            )}
+
+                            {endTransferMutation.error instanceof Error && (
+                                <p className="mt-1 text-center text-rose-300">{endTransferMutation.error.message}</p>
+                            )}
+
                             {!isFetching && !error && searchResponse !== undefined && books.length === 0 && (
                                 <p className="text-center text-slate-400">No books found.</p>
                             )}
@@ -400,6 +297,10 @@ function App() {
                                                     book={book}
                                                     isDownloadLoading={
                                                         activeDownloadMd5 === book.md5 && downloadMutation.isPending
+                                                    }
+                                                    isTransferLoading={
+                                                        activeTransferMd5 === book.md5 &&
+                                                        startTransferMutation.isPending
                                                     }
                                                     transferEntry={transferEntry}
                                                     remainingMs={remainingMs}
@@ -478,7 +379,7 @@ function App() {
                 <aside className="fixed right-4 top-4 z-20 w-[min(22rem,calc(100vw-2rem))]">
                     <div className="w-full rounded-xl border border-slate-700/70 bg-slate-950/85 p-3 backdrop-blur">
                         <p className="text-sm text-slate-300">Enter transfer code</p>
-                        <form className="mt-2 flex items-center gap-2" onSubmit={event => event.preventDefault()}>
+                        <form className="mt-2 flex items-center gap-2" onSubmit={handleSubmitTransferCode}>
                             <label htmlFor="kobo-transfer-code" className="sr-only">
                                 Transfer code
                             </label>
@@ -493,9 +394,10 @@ function App() {
                             />
                             <button
                                 type="submit"
-                                className="rounded-md border border-slate-500/50 bg-slate-800/90 px-3 py-2 text-sm text-slate-100 transition hover:border-slate-400 hover:bg-slate-700/90"
+                                disabled={endTransferMutation.isPending}
+                                className="rounded-md border border-slate-500/50 bg-slate-800/90 px-3 py-2 text-sm text-slate-100 transition hover:border-slate-400 hover:bg-slate-700/90 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                Submit
+                                {endTransferMutation.isPending ? "Submitting..." : "Submit"}
                             </button>
                         </form>
                     </div>
