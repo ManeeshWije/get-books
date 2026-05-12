@@ -108,7 +108,7 @@ function BookCard({
                 {isTransferActive && (
                     <p className="mt-2 text-[11px] text-slate-400">
                         On your Kobo device, open Beta Features → Browse Internet, then visit {koboUrl} and enter this
-                        code within 10 minutes.
+                        code within 5 minutes.
                     </p>
                 )}
             </div>
