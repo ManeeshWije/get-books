@@ -15,7 +15,7 @@ COPY frontend .
 RUN npm install
 RUN npm run build
 
-FROM --platform=$TARGETPLATFORM golang:1.24-bookworm AS gobuilder
+FROM --platform=$TARGETPLATFORM golang:1.25-bookworm AS gobuilder
 
 # Install kepubify
 RUN go install github.com/pgaskin/kepubify@latest
