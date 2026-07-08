@@ -4,6 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    nix2container.url = "github:nlewo/nix2container";
   };
 
   outputs =
@@ -11,12 +12,14 @@
       self,
       nixpkgs,
       flake-utils,
+      nix2container,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = import nixpkgs { inherit system; };
         lib = pkgs.lib;
+        nix2containerPkgs = nix2container.packages.${system};
       in
       {
         packages = rec {
@@ -62,6 +65,17 @@
 
               runHook postInstall
             '';
+          };
+
+          dockerImage = nix2containerPkgs.nix2container.buildImage {
+            name = "maneeshwije/get-books";
+            tag = "latest";
+
+            copyToRoot = app;
+
+            config = {
+              entrypoint = [ "/bin/get-books" ];
+            };
           };
 
           default = app;
